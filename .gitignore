@@ -1,0 +1,17 @@
+# venv
+.venv/
+
+# secrets
+.env
+
+# python cache
+__pycache__/
+*.pyc
+
+# system
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
