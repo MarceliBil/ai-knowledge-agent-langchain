@@ -1,42 +1,48 @@
+from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
 import hashlib
-from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
-
-
-def enrich_metadata(chunks):
-    for i, c in enumerate(chunks):
-        c.metadata["chunk_id"] = i
-        c.metadata["source"] = c.metadata.get("source", "google_drive")
-        c.metadata["file"] = c.metadata.get("file_name", "unknown")
-    return chunks
-
-
-def add_chunk_hash(chunks):
-    for c in chunks:
-        h = hashlib.sha256(c.page_content.encode()).hexdigest()
-        c.metadata["hash"] = h
-    return chunks
 
 
 def production_chunk_documents(docs):
-    semantic_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", ". ", " "],
+    structural_splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000,
-        chunk_overlap=0,
+        chunk_overlap=200,
+        separators=[
+            "\n## ",
+            "\n# ",
+            "\n### ",
+            "\n- ",
+            "\n• ",
+            "\n1. ",
+            "\nStep ",
+            "\n\n",
+            "\n",
+            " "
+        ]
     )
 
-    semantic_chunks = semantic_splitter.split_documents(docs)
+    stage1_chunks = structural_splitter.split_documents(docs)
 
     token_splitter = TokenTextSplitter(
-        chunk_size=300,
-        chunk_overlap=60,
+        chunk_size=700,
+        chunk_overlap=150
     )
 
-    final_chunks = []
+    final_chunks = token_splitter.split_documents(stage1_chunks)
 
-    for doc in semantic_chunks:
-        final_chunks.extend(token_splitter.split_documents([doc]))
+    total = len(final_chunks)
 
-    final_chunks = enrich_metadata(final_chunks)
-    final_chunks = add_chunk_hash(final_chunks)
+    for i, chunk in enumerate(final_chunks):
+        content_hash = hashlib.sha256(
+            chunk.page_content.encode()
+        ).hexdigest()
+
+        chunk.metadata.update({
+            "chunk_id": i,
+            "chunk_hash": content_hash,
+            "chunk_position": i,
+            "total_chunks": total,
+            "source": chunk.metadata.get("source", "unknown"),
+            "file": chunk.metadata.get("file", "unknown")
+        })
 
     return final_chunks

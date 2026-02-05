@@ -1,7 +1,16 @@
-from ingest.drive_loader import load_docs
-from ingest.chunking import production_chunk_documents
-from ingest.index_to_db import save_chunks
+from dotenv import load_dotenv
 
-docs = load_docs()
-chunks = production_chunk_documents(docs)
-save_chunks(chunks)
+from ingest.blob_loader import load_documents
+from ingest.chunking import production_chunk_documents
+from ingest.index_azure_search import index_documents
+
+
+def run():
+    load_dotenv()
+    docs = load_documents()
+    chunks = production_chunk_documents(docs)
+    index_documents(chunks)
+
+
+if __name__ == "__main__":
+    run()
