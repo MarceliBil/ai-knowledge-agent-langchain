@@ -1,4 +1,4 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 import hashlib
 
 

@@ -16,7 +16,4 @@ def get_retriever():
     store = get_vector_store()
     return store.as_retriever(
         search_type="hybrid",
-        search_kwargs={
-            "k": 5
-        }
     )

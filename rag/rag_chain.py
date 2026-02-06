@@ -8,14 +8,14 @@ from rag.retriever import get_retriever
 
 def get_llm():
     return ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-3-haiku-20240307",
         temperature=0
     )
 
 
 def get_prompt():
     return ChatPromptTemplate.from_template(
-        """Odpowiadaj wyłącznie na podstawie dostarczonego kontekstu.
+        """Odpowiadaj wyłącznie na podstawie dostarczonego kontekstu (w output nie wspomianj, że to robisz - mów po prostu naturalnie).
 Jeśli odpowiedź nie znajduje się w kontekście - napisz że nie ma jej w dokumentach.
 
 Kontekst:
