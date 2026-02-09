@@ -1,7 +1,7 @@
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableMap, RunnableLambda, RunnablePassthrough
 from langchain_anthropic import ChatAnthropic
-from langchain_core.runnables import RunnablePassthrough
 
 from rag.retriever import get_retriever
 
@@ -13,23 +13,20 @@ def get_llm():
     )
 
 
-def get_prompt():
-    return ChatPromptTemplate.from_template(
-        """Odpowiadaj wyłącznie na podstawie dostarczonego kontekstu (w output nie wspomianj, że to robisz - mów po prostu naturalnie).
-Jeśli odpowiedź nie znajduje się w kontekście - napisz że nie ma jej w dokumentach.
+def join_docs(docs):
+    return "\n\n".join(d.page_content for d in docs)
 
-Kontekst:
+
+def get_prompt():
+    return ChatPromptTemplate.from_messages([
+        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli brak odpowiedzi w dokumentach — powiedz że jej nie ma."),
+        MessagesPlaceholder("chat_history"),
+        ("human", """Kontekst:
 {context}
 
 Pytanie:
-{question}
-
-Odpowiedź:"""
-    )
-
-
-def format_docs(docs):
-    return "\n\n".join(d.page_content for d in docs)
+{input}""")
+    ])
 
 
 def get_rag_chain():
@@ -37,11 +34,16 @@ def get_rag_chain():
     llm = get_llm()
     prompt = get_prompt()
 
+    retrieval_block = RunnableLambda(
+        lambda x: retriever.invoke(x["input"])
+    ) | RunnableLambda(join_docs)
+
     chain = (
-        {
-            "context": retriever | format_docs,
-            "question": RunnablePassthrough()
-        }
+        RunnableMap({
+            "context": retrieval_block,
+            "input": RunnableLambda(lambda x: x["input"]),
+            "chat_history": RunnableLambda(lambda x: x["chat_history"])
+        })
         | prompt
         | llm
         | StrOutputParser()

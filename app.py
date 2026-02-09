@@ -1,6 +1,7 @@
 import streamlit as st
 from dotenv import load_dotenv
 from rag.rag_chain import get_rag_chain
+from langchain_core.messages import HumanMessage, AIMessage
 
 load_dotenv()
 
@@ -62,9 +63,20 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    history = []
+    for m in st.session_state.messages[:-1]:
+        if m["role"] == "user":
+            history.append(HumanMessage(content=m["content"]))
+        else:
+            history.append(AIMessage(content=m["content"]))
+
     with st.chat_message("assistant"):
-        response = st.session_state.chain.invoke(prompt)
+        response = st.session_state.chain.invoke({
+            "input": prompt,
+            "chat_history": history
+        })
         st.markdown(response)
 
     st.session_state.messages.append(
-        {"role": "assistant", "content": response})
+        {"role": "assistant", "content": response}
+    )
