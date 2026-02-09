@@ -1,29 +1,62 @@
 import os
+import tempfile
 from pathlib import PurePath
-from langchain_community.document_loaders import AzureBlobStorageContainerLoader
+
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+)
 
 
 def load_documents():
-    loader = AzureBlobStorageContainerLoader(
-        conn_str=os.environ["AZURE_STORAGE_CONNECTION_STRING"],
-        container=os.environ["AZURE_STORAGE_CONTAINER"]
+    try:
+        from azure.storage.blob import ContainerClient
+    except ImportError as exc:
+        raise ImportError(
+            "Could not import azure storage blob python package. "
+            "Please install it with `pip install azure-storage-blob`."
+        ) from exc
+
+    conn_str = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
+    container_name = os.environ["AZURE_STORAGE_CONTAINER"]
+
+    container = ContainerClient.from_connection_string(
+        conn_str=conn_str, container_name=container_name
     )
 
-    docs = loader.load()
+    docs = []
+    with tempfile.TemporaryDirectory() as temp_dir:
+        for blob in container.list_blobs():
+            blob_name = blob.name
+            suffix = PurePath(blob_name).suffix.lower()
 
-    for d in docs:
-        md = d.metadata or {}
-        original_source = md.get("source")
-        if original_source:
-            md["source_path"] = str(original_source).strip()
+            if suffix not in {".pdf", ".txt"}:
+                continue
 
-        file_name = md.get("blob_name")
-        if not file_name and original_source:
-            file_name = PurePath(
-                str(original_source).strip().replace("\\", "/")).name
+            local_path = os.path.join(temp_dir, container_name, blob_name)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-        md["source"] = "azure_blob"
-        md["file"] = (str(file_name).strip() if file_name else "unknown")
-        d.metadata = md
+            blob_client = container.get_blob_client(blob=blob_name)
+            with open(local_path, "wb") as f:
+                stream = blob_client.download_blob()
+                stream.readinto(f)
+
+            if suffix == ".pdf":
+                file_docs = PyPDFLoader(local_path).load()
+            else:
+                file_docs = TextLoader(
+                    local_path,
+                    encoding=None,
+                    autodetect_encoding=True,
+                ).load()
+
+            for d in file_docs:
+                md = d.metadata or {}
+                md["blob_name"] = blob_name
+                md["source_path"] = blob_name
+                md["source"] = "azure_blob"
+                md["file"] = PurePath(blob_name).name
+                d.metadata = md
+            docs.extend(file_docs)
 
     return docs
