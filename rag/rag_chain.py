@@ -4,11 +4,13 @@ from langchain_core.runnables import RunnableMap, RunnableLambda, RunnablePassth
 from langchain_anthropic import ChatAnthropic
 
 from rag.retriever import get_retriever
+from config.settings import get_settings
 
 
 def get_llm():
+    s = get_settings()
     return ChatAnthropic(
-        model="claude-3-haiku-20240307",
+        model=s.llm_model,
         temperature=0
     )
 
@@ -17,9 +19,22 @@ def join_docs(docs):
     return "\n\n".join(d.page_content for d in docs)
 
 
+def format_sources(docs):
+    seen = set()
+    lines = []
+    for d in docs:
+        file_name = (d.metadata or {}).get("file") or (
+            d.metadata or {}).get("source") or "unknown"
+        if file_name in seen:
+            continue
+        seen.add(file_name)
+        lines.append(f"- {file_name}")
+    return "\n".join(lines) if lines else "- none"
+
+
 def get_prompt():
     return ChatPromptTemplate.from_messages([
-        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli brak odpowiedzi w dokumentach — powiedz że jej nie ma."),
+        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli nie ma odpowiedzi w dokumentach, powiedz że jej nie ma."),
         MessagesPlaceholder("chat_history"),
         ("human", """Kontekst:
 {context}
@@ -34,19 +49,18 @@ def get_rag_chain():
     llm = get_llm()
     prompt = get_prompt()
 
-    retrieval_block = RunnableLambda(
-        lambda x: retriever.invoke(x["input"])
-    ) | RunnableLambda(join_docs)
+    docs_runnable = RunnableLambda(lambda x: retriever.invoke(x["input"]))
 
-    chain = (
-        RunnableMap({
-            "context": retrieval_block,
-            "input": RunnableLambda(lambda x: x["input"]),
-            "chat_history": RunnableLambda(lambda x: x["chat_history"])
-        })
-        | prompt
-        | llm
-        | StrOutputParser()
+    base = RunnablePassthrough.assign(docs=docs_runnable)
+    base = base.assign(context=RunnableLambda(lambda x: join_docs(x["docs"])))
+    base = base.assign(sources=RunnableLambda(
+        lambda x: format_sources(x["docs"])))
+
+    out = RunnableMap(
+        {
+            "answer": (prompt | llm | StrOutputParser()),
+            "sources": RunnableLambda(lambda x: x["sources"]),
+        }
     )
 
-    return chain
+    return base | out | RunnableLambda(lambda x: f"{x['answer']}\n\nSources:\n{x['sources']}")
