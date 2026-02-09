@@ -23,8 +23,13 @@ def format_sources(docs):
     seen = set()
     lines = []
     for d in docs:
-        file_name = (d.metadata or {}).get("file") or (
-            d.metadata or {}).get("source") or "unknown"
+        md = d.metadata or {}
+        file_name = md.get("file")
+        if not file_name:
+            path = md.get("source_path") or md.get("source")
+            if path:
+                file_name = str(path).strip().replace("\\", "/").split("/")[-1]
+        file_name = str(file_name).strip() if file_name else "unknown"
         if file_name in seen:
             continue
         seen.add(file_name)

@@ -71,10 +71,13 @@ if prompt:
             history.append(AIMessage(content=m["content"]))
 
     with st.chat_message("assistant"):
+        thinking_placeholder = st.empty()
+        thinking_placeholder.markdown("Thinking...")
         response = st.session_state.chain.invoke({
             "input": prompt,
             "chat_history": history
         })
+        thinking_placeholder.empty()
         st.markdown(response)
 
     st.session_state.messages.append(

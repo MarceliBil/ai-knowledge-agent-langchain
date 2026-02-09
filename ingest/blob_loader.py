@@ -1,4 +1,5 @@
 import os
+from pathlib import PurePath
 from langchain_community.document_loaders import AzureBlobStorageContainerLoader
 
 
@@ -11,7 +12,18 @@ def load_documents():
     docs = loader.load()
 
     for d in docs:
-        d.metadata["source"] = "azure_blob"
-        d.metadata["file"] = d.metadata.get("blob_name", "unknown")
+        md = d.metadata or {}
+        original_source = md.get("source")
+        if original_source:
+            md["source_path"] = str(original_source).strip()
+
+        file_name = md.get("blob_name")
+        if not file_name and original_source:
+            file_name = PurePath(
+                str(original_source).strip().replace("\\", "/")).name
+
+        md["source"] = "azure_blob"
+        md["file"] = (str(file_name).strip() if file_name else "unknown")
+        d.metadata = md
 
     return docs
