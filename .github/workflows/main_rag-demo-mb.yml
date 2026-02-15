@@ -36,16 +36,7 @@ jobs:
           zip -r release.zip . \
             -x ".git/*" \
                ".github/*" \
-               ".venv/*" \
-               "venv/*" \
-               "**/__pycache__/*" \
-               "*.pyc" \
-               ".pytest_cache/*" \
-               ".mypy_cache/*" \
-               ".vscode/*" \
-               ".idea/*" \
-               "deploy.zip" \
-               "_deploy_check/*"
+               "release.zip"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
