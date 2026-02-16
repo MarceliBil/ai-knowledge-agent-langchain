@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # set this to the path to your web app project, defaults to the repository root
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: ${{ github.workspace }} # deploy absolute path to avoid cwd surprises
   PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
@@ -29,6 +29,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies into .python_packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+
+      - name: Sanity check package contents
+        run: |
+          pwd
+          ls -la
+          ls -la azure_functions ingest rag config
+          python -c "import os; print('function_app.py exists:', os.path.exists('function_app.py'))"
+          python -c "import os; print('azure_functions/function_app.py exists:', os.path.exists('azure_functions/function_app.py'))"
         
       - name: Login to Azure
         uses: azure/login@v2
@@ -44,6 +57,6 @@ jobs:
           app-name: 'rag-demo-mb'
           slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          scm-do-build-during-deployment: true
-          enable-oryx-build: true
+          scm-do-build-during-deployment: false
+          enable-oryx-build: false
           
