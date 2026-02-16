@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: ${{ github.workspace }} # deploy absolute path to avoid cwd surprises
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: ${{ github.workspace }}/functionapp.zip # explicit zip for deterministic deployments
   PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
@@ -42,6 +42,16 @@ jobs:
           ls -la azure_functions ingest rag config
           python -c "import os; print('function_app.py exists:', os.path.exists('function_app.py'))"
           python -c "import os; print('azure_functions/function_app.py exists:', os.path.exists('azure_functions/function_app.py'))"
+
+      - name: Create deployment zip
+        run: |
+          rm -f functionapp.zip
+          zip -r functionapp.zip . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "functionapp.zip"
+          echo "--- ZIP contents (first 200 lines) ---"
+          unzip -l functionapp.zip | head -n 200
         
       - name: Login to Azure
         uses: azure/login@v2
