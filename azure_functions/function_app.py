@@ -7,10 +7,9 @@ from pathlib import PurePath
 
 import azure.functions as func
 from dotenv import load_dotenv
+from function_app import app
 
 load_dotenv()
-
-app = func.FunctionApp()
 
 
 @app.function_name(name="healthz")

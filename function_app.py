@@ -1,3 +1,4 @@
-from azure_functions.function_app import app
+import azure_functions.function_app
+import azure.functions as func
 
-__all__ = ["app"]
+app = func.FunctionApp()
