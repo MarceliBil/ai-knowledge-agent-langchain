@@ -5,8 +5,12 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -15,10 +19,9 @@ jobs:
         with:
           python-version: 3.11
 
-      - run: |
-          pip install -r requirements.txt
-          mkdir -p .python_packages/lib/site-packages
-          pip install -r requirements.txt -t .python_packages/lib/site-packages
+      - name: Install packages into deploy folder
+        run: |
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - uses: azure/login@v2
         with:
