@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: ${{ github.workspace }}/functionapp.zip # explicit zip for deterministic deployments
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # deploy sources; build dependencies on Azure via Oryx
   PYTHON_VERSION: '3.11' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
@@ -30,11 +30,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies into .python_packages
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt --target=".python_packages/lib/site-packages"
-
       - name: Sanity check package contents
         run: |
           pwd
@@ -42,16 +37,6 @@ jobs:
           ls -la azure_functions ingest rag config
           python -c "import os; print('function_app.py exists:', os.path.exists('function_app.py'))"
           python -c "import os; print('azure_functions/function_app.py exists:', os.path.exists('azure_functions/function_app.py'))"
-
-      - name: Create deployment zip
-        run: |
-          rm -f functionapp.zip
-          zip -r functionapp.zip . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x "functionapp.zip"
-          echo "--- ZIP contents (first 200 lines) ---"
-          unzip -l functionapp.zip | head -n 200
         
       - name: Login to Azure
         uses: azure/login@v2
@@ -67,6 +52,6 @@ jobs:
           app-name: 'rag-demo-mb'
           slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          scm-do-build-during-deployment: false
-          enable-oryx-build: false
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
           
