@@ -124,21 +124,16 @@ def _handle_delete(blob_name: str) -> None:
 @app.function_name(name="blob_ingest")
 @app.event_grid_trigger(arg_name="event", data_type="string")
 def blob_ingest(event: func.EventGridEvent):
-
+    import logging
     et = (event.event_type or "").lower()
-
-    try:
-        data = json.loads(event.get_body().decode())
-    except Exception as e:
-        logging.error(f"Event parse error: {e}")
+    data = event.get_json() or {}
+    logging.warning(data)
+    url = data.get("url")
+    if not url:
+        logging.warning("Event missing url field")
         return
 
-    url = str(data.get("url") or "")
-    blob_name = _blob_name_from_url(url) if url else ""
-
-    if not blob_name:
-        logging.warning("No blob name in event")
-        return
+    blob_name = _blob_name_from_url(url)
 
     if "blobdeleted" in et:
         _handle_delete(blob_name)
