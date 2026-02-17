@@ -8,14 +8,15 @@ from pathlib import PurePath
 import azure.functions as func
 from dotenv import load_dotenv
 
-from ingest.chunking import production_chunk_documents
-from ingest.index_azure_search import chunk_id_from_doc_id, index_documents
-from ingest.state_store import DocState, delete_state, load_state, save_state
-from rag.vector_store import get_vector_store
-
 load_dotenv()
 
 app = func.FunctionApp()
+
+
+@app.function_name(name="healthz")
+@app.route(route="healthz", auth_level=func.AuthLevel.ANONYMOUS)
+def healthz(req: func.HttpRequest) -> func.HttpResponse:
+    return func.HttpResponse("ok", status_code=200)
 
 
 def _container_client():
@@ -74,6 +75,9 @@ def _load_docs(local_path: str, blob_name: str):
 def _delete_ids(doc_id: str, start: int, end: int) -> None:
     if end <= start:
         return
+    from rag.vector_store import get_vector_store
+    from ingest.index_azure_search import chunk_id_from_doc_id
+
     store = get_vector_store()
     ids = [chunk_id_from_doc_id(doc_id, i) for i in range(start, end)]
     store.delete(ids=ids)
@@ -82,6 +86,10 @@ def _delete_ids(doc_id: str, start: int, end: int) -> None:
 def _handle_upsert(blob_name: str) -> None:
     if not _supported(blob_name):
         return
+
+    from ingest.chunking import production_chunk_documents
+    from ingest.index_azure_search import index_documents
+    from ingest.state_store import DocState, load_state, save_state
 
     container = _container_client()
     doc_id = blob_name
@@ -106,6 +114,8 @@ def _handle_upsert(blob_name: str) -> None:
 
 
 def _handle_delete(blob_name: str) -> None:
+    from ingest.state_store import delete_state, load_state
+
     container = _container_client()
     doc_id = blob_name
     prev = load_state(container, doc_id)
