@@ -121,7 +121,7 @@ def _handle_delete(blob_name: str) -> None:
 
 
 @app.function_name(name="blob_ingest")
-@app.event_grid_trigger(arg_name="event")
+@app.event_grid_trigger(arg_name="event", data_type="string")
 def blob_ingest(event: func.EventGridEvent):
     et = (event.event_type or "").lower()
     data = event.get_json() or {}
@@ -133,6 +133,3 @@ def blob_ingest(event: func.EventGridEvent):
         _handle_delete(blob_name)
     else:
         _handle_upsert(blob_name)
-
-
-app = func.FunctionApp()
