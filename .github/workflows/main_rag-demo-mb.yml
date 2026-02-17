@@ -17,29 +17,21 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python version
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies (test build)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Azure Login
-        uses: azure/login@v2
+      - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_83A02592801E4A7EB663A873DCC2E752 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_8F10E164C53E4DBDB1C21FD5AF8A2E4E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B47593E3D7194F689CBE9A4B9D770998 }}
 
-      - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1
+      - uses: Azure/functions-action@v1
         with:
           app-name: 'rag-demo-mb'
           slot-name: 'Production'
           package: .
+          scm-do-build-during-deployment: true
