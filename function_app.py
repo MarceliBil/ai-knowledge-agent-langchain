@@ -1,12 +1,12 @@
 from __future__ import annotations
-
 import json
 import os
 import tempfile
 from pathlib import PurePath
-
 import azure.functions as func
 from dotenv import load_dotenv
+print("FUNCTION APP FILE EXECUTED")
+
 
 load_dotenv()
 
@@ -138,3 +138,6 @@ def blob_ingest(event: func.EventGridEvent):
         _handle_delete(blob_name)
     else:
         _handle_upsert(blob_name)
+
+
+print("FUNCTION APP LOADED SUCCESSFULLY")
