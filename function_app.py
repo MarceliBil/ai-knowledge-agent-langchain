@@ -138,8 +138,3 @@ def blob_ingest(event: func.EventGridEvent):
         _handle_delete(blob_name)
     else:
         _handle_upsert(blob_name)
-
-
-@app.route(route="ping")
-def ping(req: func.HttpRequest):
-    return func.HttpResponse("pong")
