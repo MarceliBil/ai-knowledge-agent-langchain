@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import json
 import os
 import tempfile
@@ -123,12 +124,22 @@ def _handle_delete(blob_name: str) -> None:
 @app.function_name(name="blob_ingest")
 @app.event_grid_trigger(arg_name="event", data_type="string")
 def blob_ingest(event: func.EventGridEvent):
+
     et = (event.event_type or "").lower()
-    data = event.get_json() or {}
+
+    try:
+        data = json.loads(event.get_body().decode())
+    except Exception as e:
+        logging.error(f"Event parse error: {e}")
+        return
+
     url = str(data.get("url") or "")
     blob_name = _blob_name_from_url(url) if url else ""
+
     if not blob_name:
+        logging.warning("No blob name in event")
         return
+
     if "blobdeleted" in et:
         _handle_delete(blob_name)
     else:
