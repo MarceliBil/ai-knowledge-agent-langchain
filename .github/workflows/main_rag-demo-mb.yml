@@ -25,11 +25,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create deployment package
+      - name: Install dependencies (test build)
         run: |
-          zip -r release.zip function_app.py host.json requirements.txt azure_functions ingest rag config
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Login to Azure
+      - name: Azure Login
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_83A02592801E4A7EB663A873DCC2E752 }}
@@ -41,6 +42,4 @@ jobs:
         with:
           app-name: 'rag-demo-mb'
           slot-name: 'Production'
-          package: release.zip
-          scm-do-build-during-deployment: true
-          enable-oryx-build: true
+          package: .
