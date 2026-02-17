@@ -2,26 +2,23 @@ name: Build and deploy Python project to Azure Function App - rag-demo-mb
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-env:
-  PYTHON_VERSION: '3.11'
+    branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: 3.11
+
+      - run: |
+          pip install -r requirements.txt
+          mkdir -p .python_packages/lib/site-packages
+          pip install -r requirements.txt -t .python_packages/lib/site-packages
 
       - uses: azure/login@v2
         with:
@@ -31,7 +28,5 @@ jobs:
 
       - uses: Azure/functions-action@v1
         with:
-          app-name: 'rag-demo-mb'
-          slot-name: 'Production'
+          app-name: rag-demo-mb
           package: .
-          scm-do-build-during-deployment: true
