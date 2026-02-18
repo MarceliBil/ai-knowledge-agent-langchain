@@ -19,8 +19,5 @@ def get_vector_store() -> AzureSearch:
         vector_key="content_vector",
         fields=[
             SearchField(name="doc_id", type="Edm.String"),
-            SearchField(name="file", type="Edm.String"),
-            SearchField(name="source", type="Edm.String"),
-            SearchField(name="blob_name", type="Edm.String"),
         ]
     )
