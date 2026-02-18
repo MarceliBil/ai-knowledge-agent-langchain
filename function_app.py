@@ -101,33 +101,21 @@ def _load_docs(local_path: str, blob_name: str):
         md["source_path"] = blob_name
         md["source"] = "azure_blob"
         md["file"] = PurePath(blob_name).name
+        md["doc_id"] = blob_name
         d.metadata = md
 
     return docs
 
 
 def _delete_ids(doc_id: str, *_):
-    logging.warning(f"Deleting all chunks for {doc_id}")
+    logging.warning(f"Deleting document from index: {doc_id}")
 
     from rag.vector_store import get_vector_store
-
     store = get_vector_store()
 
     try:
-        results = store.client.search(
-            search_text=doc_id,
-            top=1000
-        )
-
-        ids = [doc["id"] for doc in results]
-
-        if not ids:
-            logging.warning("No matching documents found in index")
-            return
-
-        store.delete(ids=ids)
-
-        logging.warning(f"Deleted {len(ids)} chunks")
+        store.delete(filter=f"doc_id eq '{doc_id}'")
+        logging.warning("Delete completed")
 
     except Exception as e:
         logging.error("Delete failed")
@@ -171,18 +159,17 @@ def _handle_upsert(blob_name: str) -> None:
     chunks = production_chunk_documents(docs)
     logging.warning(f"Chunks count: {len(chunks)}")
 
-    logging.warning("Indexing docs")
+    logging.warning(f"Replacing document in index → {doc_id}")
+
+    _delete_ids(doc_id)
+
+    logging.warning("Indexing new chunks")
     index_documents(chunks)
-
-    new_count = len(chunks)
-    old_count = prev.chunk_count if prev else 0
-
-    _delete_ids(doc_id, new_count, old_count)
 
     save_state(container, DocState(
         doc_id=doc_id,
         etag=etag,
-        chunk_count=new_count
+        chunk_count=len(chunks)
     ))
 
     logging.warning("UPSERT completed")
