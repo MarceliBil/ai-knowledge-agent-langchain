@@ -16,4 +16,10 @@ def get_vector_store() -> AzureSearch:
         embedding_function=get_embeddings().embed_query,
         content_key="content",
         vector_key="content_vector",
+        fields={
+            "doc_id": "doc_id",
+            "file": "file",
+            "source": "source",
+            "blob_name": "blob_name"
+        }
     )
