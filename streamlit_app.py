@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -8,9 +9,17 @@ st.set_page_config(page_title="RAG Knowledge Agent")
 
 
 @st.cache_resource(show_spinner=False)
-def _build_chain():
+def _build_chain(_version: str):
     from rag.rag_chain import get_rag_chain
     return get_rag_chain()
+
+
+def _chain_version() -> str:
+    p = Path(__file__).parent / "rag" / "rag_chain.py"
+    try:
+        return str(p.stat().st_mtime_ns)
+    except OSError:
+        return "0"
 
 
 if "messages" not in st.session_state:
@@ -18,6 +27,9 @@ if "messages" not in st.session_state:
 
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
+
+if "msg_count" not in st.session_state:
+    st.session_state.msg_count = 0
 
 st.title("RAG Knowledge Agent")
 
@@ -62,11 +74,15 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-prompt = st.chat_input("Zadaj pytanie na temat zasad w Twojej organizacji...")
+prompt = st.chat_input(
+    "Zadaj pytanie na temat zasad w Twojej organizacji...",
+    disabled=st.session_state.pending_prompt is not None
+)
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.pending_prompt = prompt
+    st.session_state.msg_count += 1
     st.rerun()
 
 if st.session_state.pending_prompt:
@@ -83,8 +99,10 @@ if st.session_state.pending_prompt:
         placeholder = st.empty()
         placeholder.markdown("Thinking...")
 
-        if "chain" not in st.session_state:
-            st.session_state.chain = _build_chain()
+        v = _chain_version()
+        if st.session_state.get("chain_version") != v:
+            st.session_state.chain = _build_chain(v)
+            st.session_state.chain_version = v
 
         raw = st.session_state.chain.invoke(
             {"input": pending, "chat_history": history}
@@ -102,4 +120,5 @@ if st.session_state.pending_prompt:
     st.session_state.messages.append(
         {"role": "assistant", "content": response})
     st.session_state.pending_prompt = None
+    st.session_state.msg_count += 1
     st.rerun()

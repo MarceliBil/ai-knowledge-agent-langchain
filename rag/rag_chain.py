@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableMap, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableBranch, RunnableMap, RunnableLambda, RunnablePassthrough
 from langchain_anthropic import ChatAnthropic
 
 from rag.retriever import get_retriever
@@ -34,12 +34,12 @@ def format_sources(docs):
             continue
         seen.add(file_name)
         lines.append(f"- {file_name}")
-    return "\n".join(lines) if lines else "- none"
+    return "\n".join(lines) if lines else ""
 
 
 def get_prompt():
     return ChatPromptTemplate.from_messages([
-        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli nie ma odpowiedzi w dokumentach, powiedz że jej nie ma."),
+        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli kontekst nie pozwala odpowiedzieć na pytanie, odpowiedz dokładnie: Nie mam wiedzy na ten temat. Jeśli kontekst zawiera choćby część odpowiedzi, podaj wyłącznie to, co wynika z kontekstu, w maksymalnie 2 krótkich zdaniach. Nie dodawaj zastrzeżeń typu 'nie mam wystarczających informacji' ani przeprosin."),
         MessagesPlaceholder("chat_history"),
         ("human", """Kontekst:
 {context}
@@ -49,10 +49,55 @@ Pytanie:
     ])
 
 
+def get_judge_prompt():
+    return ChatPromptTemplate.from_messages([
+        ("system", "Oceń, czy na podstawie KONTEKSTU da się jednoznacznie odpowiedzieć na PYTANIE. Zwróć wyłącznie YES albo NO. Jeśli kontekst jest nie na temat, zwróć NO."),
+        ("human", """PYTANIE:
+{input}
+
+KONTEKST:
+{context}""")
+    ])
+
+
+def get_route_prompt():
+    return ChatPromptTemplate.from_messages([
+        ("system", "Zwróć dokładnie jeden token: RECAP albo RAG. Zwróć RECAP, jeśli użytkownik pyta o historię tej rozmowy (np. o co pytał wcześniej, jakie było ostatnie pytanie, co mówił wcześniej, przypomnij). W przeciwnym razie zwróć RAG. Nie dodawaj żadnych innych słów."),
+        ("human", "{input}")
+    ])
+
+
 def get_rag_chain():
     retriever = get_retriever()
     llm = get_llm()
     prompt = get_prompt()
+    judge_prompt = get_judge_prompt()
+    route_prompt = get_route_prompt()
+
+    unknown = "Nie mam wiedzy na ten temat."
+
+    route_runnable = (
+        route_prompt
+        | llm
+        | StrOutputParser()
+        | RunnableLambda(lambda s: "RECAP" if "RECAP" in str(s).strip().upper() else "RAG")
+    )
+
+    start = RunnablePassthrough.assign(route=route_runnable)
+
+    def _recap(x):
+        history = x.get("chat_history") or []
+        last = ""
+        for m in reversed(history):
+            if getattr(m, "type", "") != "human":
+                continue
+            c = str(getattr(m, "content", "") or "").strip()
+            if c:
+                last = c
+                break
+        return last or unknown
+
+    recap_chain = RunnableLambda(_recap)
 
     docs_runnable = RunnableLambda(lambda x: retriever.invoke(x["input"]))
 
@@ -61,11 +106,42 @@ def get_rag_chain():
     base = base.assign(sources=RunnableLambda(
         lambda x: format_sources(x["docs"])))
 
+    judge_ok_runnable = RunnableBranch(
+        (lambda x: not (x.get("context") or "").strip(),
+         RunnableLambda(lambda _: False)),
+        judge_prompt
+        | llm
+        | StrOutputParser()
+        | RunnableLambda(lambda s: str(s).strip().upper() == "YES"),
+    )
+
+    base = base.assign(judge_ok=judge_ok_runnable)
+
+    answer = RunnableBranch(
+        (lambda x: not bool(x.get("judge_ok")), RunnableLambda(lambda _: unknown)),
+        prompt | llm | StrOutputParser(),
+    )
+
     out = RunnableMap(
         {
-            "answer": (prompt | llm | StrOutputParser()),
+            "answer": answer,
             "sources": RunnableLambda(lambda x: x["sources"]),
         }
     )
 
-    return base | out | RunnableLambda(lambda x: f"{x['answer']}\n\nSources:\n{x['sources']}")
+    def _render(x):
+        a = (x.get("answer") or "").strip()
+        s = (x.get("sources") or "").strip()
+        low = a.casefold()
+        if ("nie mam wiedzy" in low) or ("nie wiem" in low):
+            return unknown
+        if not s:
+            return a or unknown
+        return f"{a}\n\nSources:\n{s}"
+
+    rag_chain = base | out | RunnableLambda(_render)
+
+    return start | RunnableBranch(
+        (lambda x: (x.get("route") or "").upper() == "RECAP", recap_chain),
+        rag_chain,
+    )
