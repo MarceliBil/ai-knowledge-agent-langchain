@@ -108,20 +108,27 @@ def _load_docs(local_path: str, blob_name: str):
 
 
 def _delete_ids(doc_id: str, *_):
-    logging.warning(f"Deleting document from index: {doc_id}")
-
     from rag.vector_store import get_vector_store
     store = get_vector_store()
 
-    logging.warning(f"DELETE FILTER VALUE: [{doc_id}]")
+    safe = doc_id.replace("'", "''")
 
-    try:
-        store.delete(filter=f"doc_id eq '{doc_id}'")
-        logging.warning("Delete completed")
+    results = store.client.search(
+        search_text="*",
+        filter=f"doc_id eq '{safe}'",
+        select=["id"],
+        top=1000
+    )
 
-    except Exception as e:
-        logging.error("Delete failed")
-        logging.error(str(e))
+    ids = [r["id"] for r in results]
+
+    if not ids:
+        logging.warning("No docs found for delete")
+        return
+
+    store.delete(ids=ids)
+
+    logging.warning(f"Deleted {len(ids)} chunks")
 
 
 # ------------------------
