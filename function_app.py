@@ -106,21 +106,32 @@ def _load_docs(local_path: str, blob_name: str):
     return docs
 
 
-def _delete_ids(doc_id: str, start: int, end: int) -> None:
-    logging.warning(f"Deleting chunks from {start} to {end}")
-
-    if end <= start:
-        logging.warning("Nothing to delete")
-        return
+def _delete_ids(doc_id: str, *_):
+    logging.warning(f"Deleting all chunks for {doc_id}")
 
     from rag.vector_store import get_vector_store
-    from ingest.index_azure_search import chunk_id_from_doc_id
 
     store = get_vector_store()
-    ids = [chunk_id_from_doc_id(doc_id, i) for i in range(start, end)]
-    store.delete(ids=ids)
 
-    logging.warning("Delete completed")
+    try:
+        results = store.client.search(
+            search_text=doc_id,
+            top=1000
+        )
+
+        ids = [doc["id"] for doc in results]
+
+        if not ids:
+            logging.warning("No matching documents found in index")
+            return
+
+        store.delete(ids=ids)
+
+        logging.warning(f"Deleted {len(ids)} chunks")
+
+    except Exception as e:
+        logging.error("Delete failed")
+        logging.error(str(e))
 
 
 # ------------------------
