@@ -113,6 +113,8 @@ def _delete_ids(doc_id: str, *_):
     from rag.vector_store import get_vector_store
     store = get_vector_store()
 
+    logging.warning(f"DELETE FILTER VALUE: [{doc_id}]")
+
     try:
         store.delete(filter=f"doc_id eq '{doc_id}'")
         logging.warning("Delete completed")
