@@ -4,6 +4,7 @@ from langchain_community.vectorstores.azuresearch import AzureSearch
 
 from config.embeddings import get_embeddings
 from config.settings import get_settings
+from azure.search.documents.indexes.models import SearchField
 
 
 @lru_cache(maxsize=1)
