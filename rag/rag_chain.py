@@ -49,6 +49,22 @@ Pytanie:
     ])
 
 
+def get_contextualize_prompt():
+    return ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "Na podstawie HISTORII CZATU i OSTATNIEGO PYTANIA sformułuj jedno, samodzielne pytanie, "
+            "które można wysłać do wyszukiwarki dokumentów. "
+            "W samodzielnym pytaniu zawsze doprecyzuj temat (np. podróż służbowa / zwrot kosztów) i zachowaj sens pytania "
+            "(np. podlegają vs nie podlegają zwrotowi). "
+            "Jeśli ostatnie pytanie jest już samodzielne, zwróć je bez zmian. "
+            "Zwróć wyłącznie tekst pytania, bez dodatkowych słów."
+        ),
+        MessagesPlaceholder("chat_history"),
+        ("human", "{input}"),
+    ])
+
+
 def get_judge_prompt():
     return ChatPromptTemplate.from_messages([
         ("system", "Oceń, czy na podstawie KONTEKSTU da się jednoznacznie odpowiedzieć na PYTANIE. Zwróć wyłącznie YES albo NO. Jeśli kontekst jest nie na temat, zwróć NO."),
@@ -73,6 +89,7 @@ def get_rag_chain():
     prompt = get_prompt()
     judge_prompt = get_judge_prompt()
     route_prompt = get_route_prompt()
+    contextualize_prompt = get_contextualize_prompt()
 
     unknown = "Nie mam wiedzy na ten temat."
 
@@ -99,27 +116,37 @@ def get_rag_chain():
 
     recap_chain = RunnableLambda(_recap)
 
-    docs_runnable = RunnableLambda(lambda x: retriever.invoke(x["input"]))
+    contextualize_runnable = RunnableBranch(
+        (
+            lambda x: not (x.get("chat_history") or []),
+            RunnableLambda(lambda x: x.get("input") or ""),
+        ),
+        contextualize_prompt | llm | StrOutputParser(),
+    )
 
-    base = RunnablePassthrough.assign(docs=docs_runnable)
+    def _q(x):
+        q = (x.get("standalone_question") or x.get("input") or "").strip()
+        return q
+
+    docs_runnable = RunnableLambda(lambda x: retriever.invoke(_q(x)))
+
+    base = RunnablePassthrough.assign(
+        standalone_question=contextualize_runnable)
+    base = base.assign(docs=docs_runnable)
     base = base.assign(context=RunnableLambda(lambda x: join_docs(x["docs"])))
     base = base.assign(sources=RunnableLambda(
         lambda x: format_sources(x["docs"])))
 
-    judge_ok_runnable = RunnableBranch(
-        (lambda x: not (x.get("context") or "").strip(),
-         RunnableLambda(lambda _: False)),
-        judge_prompt
-        | llm
-        | StrOutputParser()
-        | RunnableLambda(lambda s: str(s).strip().upper() == "YES"),
-    )
-
-    base = base.assign(judge_ok=judge_ok_runnable)
+    def _prep_for_answer(x):
+        return {
+            **x,
+            "input": _q(x),
+        }
 
     answer = RunnableBranch(
-        (lambda x: not bool(x.get("judge_ok")), RunnableLambda(lambda _: unknown)),
-        prompt | llm | StrOutputParser(),
+        (lambda x: not (x.get("context") or "").strip(),
+         RunnableLambda(lambda _: unknown)),
+        RunnableLambda(_prep_for_answer) | prompt | llm | StrOutputParser(),
     )
 
     out = RunnableMap(
