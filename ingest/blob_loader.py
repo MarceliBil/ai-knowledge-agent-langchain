@@ -7,6 +7,8 @@ from langchain_community.document_loaders import (
     TextLoader,
 )
 
+from ingest.text_cleaning import normalize_extracted_text
+
 
 def load_documents():
     try:
@@ -51,11 +53,13 @@ def load_documents():
                 ).load()
 
             for d in file_docs:
+                d.page_content = normalize_extracted_text(d.page_content)
                 md = d.metadata or {}
                 md["blob_name"] = blob_name
                 md["source_path"] = blob_name
                 md["source"] = "azure_blob"
                 md["file"] = PurePath(blob_name).name
+                md["doc_id"] = blob_name
                 d.metadata = md
             docs.extend(file_docs)
 

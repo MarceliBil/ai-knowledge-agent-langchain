@@ -8,6 +8,8 @@ import traceback
 from pathlib import PurePath
 import azure.functions as func
 
+from ingest.text_cleaning import normalize_extracted_text
+
 logging.basicConfig(level=logging.WARNING)
 
 app = func.FunctionApp()
@@ -96,6 +98,7 @@ def _load_docs(local_path: str, blob_name: str):
     logging.warning(f"Loaded docs count: {len(docs)}")
 
     for d in docs:
+        d.page_content = normalize_extracted_text(d.page_content)
         md = d.metadata or {}
         md["blob_name"] = blob_name
         md["source_path"] = blob_name
