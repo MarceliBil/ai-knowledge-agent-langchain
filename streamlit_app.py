@@ -8,6 +8,26 @@ load_dotenv()
 st.set_page_config(page_title="RAG Knowledge Agent")
 
 
+PASSWORD = st.secrets.get("APP_PASSWORD")
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔒 Dostęp do aplikacji")
+
+    pwd = st.text_input("Podaj hasło", type="password")
+
+    if st.button("Wejdź"):
+        if pwd == PASSWORD:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Niepoprawne hasło")
+
+    st.stop()
+
+
 @st.cache_resource(show_spinner=False)
 def _build_chain(_version: str):
     from rag.rag_chain import get_rag_chain
