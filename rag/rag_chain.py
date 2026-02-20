@@ -39,7 +39,7 @@ def format_sources(docs):
 
 def get_prompt():
     return ChatPromptTemplate.from_messages([
-        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu. Jeśli kontekst nie pozwala odpowiedzieć na pytanie, odpowiedz dokładnie: Nie mam wiedzy na ten temat. Jeśli kontekst zawiera choćby część odpowiedzi, podaj wyłącznie to, co wynika z kontekstu, w maksymalnie 2 krótkich zdaniach. Nie dodawaj zastrzeżeń typu 'nie mam wystarczających informacji' ani przeprosin."),
+        ("system", "Odpowiadaj wyłącznie na podstawie kontekstu (ale nie wspominaj, że odpowiadasz na podstawie kontekstu, tylko po prostu udzielaj pasującej odpowiedzi). Jeśli kontekst nie pozwala odpowiedzieć na pytanie, odpowiedz dokładnie: Nie mam wiedzy na ten temat. Jeśli kontekst zawiera choćby część odpowiedzi, podaj wyłącznie to, co wynika z kontekstu, w maksymalnie 2 krótkich zdaniach. Nie dodawaj zastrzeżeń typu 'nie mam wystarczających informacji' ani przeprosin."),
         MessagesPlaceholder("chat_history"),
         ("human", """Kontekst:
 {context}
