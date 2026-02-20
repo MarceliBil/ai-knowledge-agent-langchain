@@ -8,24 +8,29 @@ load_dotenv()
 st.set_page_config(page_title="RAG Knowledge Agent")
 
 
-PASSWORD = st.secrets.get("APP_PASSWORD")
+try:
+    PASSWORD = st.secrets["APP_PASSWORD"]
+except Exception:
+    PASSWORD = None
 
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+if PASSWORD:
 
-if not st.session_state.authenticated:
-    st.title("🔒 Dostęp do aplikacji")
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
 
-    pwd = st.text_input("Podaj hasło", type="password")
+    if not st.session_state.authenticated:
+        st.title("🔒 Dostęp do aplikacji")
 
-    if st.button("Wejdź"):
-        if pwd == PASSWORD:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Niepoprawne hasło")
+        pwd = st.text_input("Podaj hasło", type="password")
 
-    st.stop()
+        if st.button("Wejdź"):
+            if pwd == PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Niepoprawne hasło")
+
+        st.stop()
 
 
 @st.cache_resource(show_spinner=False)

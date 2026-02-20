@@ -10,7 +10,8 @@ import azure.functions as func
 
 from ingest.text_cleaning import normalize_extracted_text
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = func.FunctionApp()
 
@@ -18,7 +19,7 @@ app = func.FunctionApp()
 @app.function_name(name="healthz")
 @app.route(route="healthz", auth_level=func.AuthLevel.ANONYMOUS)
 def healthz(req: func.HttpRequest) -> func.HttpResponse:
-    logging.warning("healthz called")
+    logger.info("healthz called")
     return func.HttpResponse("ok", status_code=200)
 
 
@@ -27,14 +28,13 @@ def healthz(req: func.HttpRequest) -> func.HttpResponse:
 # ------------------------
 
 def _container_client():
-    logging.warning("Creating container client")
-
     from azure.storage.blob import ContainerClient
 
     conn_str = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
     container_name = os.environ["AZURE_STORAGE_CONTAINER"]
 
-    logging.warning(f"Container name: {container_name}")
+    logger.info("Creating container client", extra={
+                "container": container_name})
 
     return ContainerClient.from_connection_string(
         conn_str=conn_str,
@@ -43,32 +43,33 @@ def _container_client():
 
 
 def _blob_name_from_url(url: str) -> str:
-    logging.warning(f"Parsing blob name from URL: {url}")
-
     container = os.environ["AZURE_STORAGE_CONTAINER"].strip("/")
     marker = f"/{container}/"
     i = url.find(marker)
 
     if i == -1:
         name = PurePath(url).name
-        logging.warning(f"Marker not found → fallback name: {name}")
+        logger.warning("Container marker not found in URL", extra={"url": url})
         return name
 
     name = url[i + len(marker):]
-    logging.warning(f"Parsed blob name: {name}")
+    logger.info("Parsed blob name", extra={"blob": name})
     return name
 
 
 def _supported(blob_name: str) -> bool:
     ok = PurePath(blob_name).suffix.lower() in {".pdf", ".txt"}
-    logging.warning(f"Supported file? {blob_name} → {ok}")
+
+    if not ok:
+        logger.warning("Unsupported file type", extra={"blob": blob_name})
+
     return ok
 
 
 def _download(container_client, blob_name: str, local_path: str) -> str:
-    logging.warning(f"Downloading blob: {blob_name}")
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    logger.info("Downloading blob", extra={"blob": blob_name})
 
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
     blob = container_client.get_blob_client(blob=blob_name)
 
     with open(local_path, "wb") as f:
@@ -76,26 +77,25 @@ def _download(container_client, blob_name: str, local_path: str) -> str:
         stream.readinto(f)
 
     etag = str(blob.get_blob_properties().etag or "")
-    logging.warning(f"Downloaded. ETag: {etag}")
+    logger.info("Download complete", extra={"blob": blob_name, "etag": etag})
     return etag
 
 
 def _load_docs(local_path: str, blob_name: str):
-    logging.warning(f"Loading document: {blob_name}")
-
     suffix = PurePath(blob_name).suffix.lower()
 
     if suffix == ".pdf":
-        logging.warning("Using PDF loader")
+        logger.info("Loading PDF", extra={"blob": blob_name})
         from langchain_community.document_loaders import PyPDFLoader
         docs = PyPDFLoader(local_path).load()
     else:
-        logging.warning("Using Text loader")
+        logger.info("Loading text file", extra={"blob": blob_name})
         from langchain_community.document_loaders import TextLoader
         docs = TextLoader(local_path, encoding=None,
                           autodetect_encoding=True).load()
 
-    logging.warning(f"Loaded docs count: {len(docs)}")
+    logger.info("Documents loaded", extra={
+                "count": len(docs), "blob": blob_name})
 
     for d in docs:
         d.page_content = normalize_extracted_text(d.page_content)
@@ -126,12 +126,13 @@ def _delete_ids(doc_id: str, *_):
     ids = [r["id"] for r in results]
 
     if not ids:
-        logging.warning("No docs found for delete")
+        logger.warning("No documents found to delete",
+                       extra={"doc_id": doc_id})
         return
 
     store.delete(ids=ids)
 
-    logging.warning(f"Deleted {len(ids)} chunks")
+    logger.info("Deleted chunks", extra={"count": len(ids), "doc_id": doc_id})
 
 
 # ------------------------
@@ -139,10 +140,9 @@ def _delete_ids(doc_id: str, *_):
 # ------------------------
 
 def _handle_upsert(blob_name: str) -> None:
-    logging.warning(f"UPSERT start → {blob_name}")
+    logger.info("UPSERT start", extra={"blob": blob_name})
 
     if not _supported(blob_name):
-        logging.warning("File type not supported — skipping")
         return
 
     from ingest.chunking import production_chunk_documents
@@ -153,7 +153,8 @@ def _handle_upsert(blob_name: str) -> None:
     doc_id = blob_name
 
     prev = load_state(container, doc_id)
-    logging.warning(f"Previous state: {prev}")
+    logger.info("Loaded previous state", extra={
+                "doc_id": doc_id, "state": str(prev)})
 
     with tempfile.TemporaryDirectory() as temp_dir:
         local_path = os.path.join(
@@ -162,20 +163,18 @@ def _handle_upsert(blob_name: str) -> None:
         etag = _download(container, blob_name, local_path)
 
         if prev and prev.etag == etag:
-            logging.warning("ETag unchanged → skipping")
+            logger.info("ETag unchanged — skipping", extra={"doc_id": doc_id})
             return
 
         docs = _load_docs(local_path, blob_name)
 
-    logging.warning("Chunking docs")
     chunks = production_chunk_documents(docs)
-    logging.warning(f"Chunks count: {len(chunks)}")
-
-    logging.warning(f"Replacing document in index → {doc_id}")
+    logger.info("Chunking complete", extra={
+                "chunks": len(chunks), "doc_id": doc_id})
 
     _delete_ids(doc_id)
 
-    logging.warning("Indexing new chunks")
+    logger.info("Indexing chunks", extra={"doc_id": doc_id})
     index_documents(chunks)
 
     save_state(container, DocState(
@@ -184,7 +183,7 @@ def _handle_upsert(blob_name: str) -> None:
         chunk_count=len(chunks)
     ))
 
-    logging.warning("UPSERT completed")
+    logger.info("UPSERT completed", extra={"doc_id": doc_id})
 
 
 # ------------------------
@@ -192,7 +191,7 @@ def _handle_upsert(blob_name: str) -> None:
 # ------------------------
 
 def _handle_delete(blob_name: str) -> None:
-    logging.warning(f"DELETE start → {blob_name}")
+    logger.info("DELETE start", extra={"blob": blob_name})
 
     from ingest.state_store import delete_state, load_state
 
@@ -202,13 +201,14 @@ def _handle_delete(blob_name: str) -> None:
     prev = load_state(container, doc_id)
 
     if not prev:
-        logging.warning("No previous state — nothing to delete")
+        logger.warning("Delete requested but no state found",
+                       extra={"doc_id": doc_id})
         return
 
     _delete_ids(doc_id, 0, prev.chunk_count)
     delete_state(container, doc_id)
 
-    logging.warning("DELETE completed")
+    logger.info("DELETE completed", extra={"doc_id": doc_id})
 
 
 # ------------------------
@@ -219,33 +219,29 @@ def _handle_delete(blob_name: str) -> None:
 @app.event_grid_trigger(arg_name="event", data_type="string")
 def blob_ingest(event: func.EventGridEvent):
 
-    logging.warning("=== EVENT RECEIVED ===")
+    logger.info("Event received")
 
     try:
         et = (event.event_type or "").lower()
-        logging.warning(f"Event type: {et}")
-
         data = event.get_json() or {}
-        logging.warning(f"Payload: {data}")
+
+        logger.info("Event payload", extra={"type": et, "data": data})
 
         url = data.get("url")
 
         if not url:
-            logging.error("Event missing URL field")
+            logger.error("Event missing URL field")
             return
 
         blob_name = _blob_name_from_url(url)
 
         if "blobdeleted" in et:
-            logging.warning("Trigger → DELETE")
             _handle_delete(blob_name)
         else:
-            logging.warning("Trigger → UPSERT")
             _handle_upsert(blob_name)
 
-        logging.warning("=== EVENT DONE ===")
+        logger.info("Event processed successfully")
 
     except Exception as e:
-        logging.error("=== EVENT FAILED ===")
-        logging.error(str(e))
-        logging.error(traceback.format_exc())
+        logger.error("Event processing failed", extra={"error": str(e)})
+        logger.error(traceback.format_exc())
