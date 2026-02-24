@@ -93,6 +93,17 @@ custom_chat_css = """
 .st-emotion-cache-184dg47 {
     background-color: rgb(0, 173, 64) !important;
 }
+
+div[data-testid="stButton"] > button {
+    padding: 1rem !important;
+    border-radius: 3rem !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+}
+
+div[data-testid="stButton"] > button p {
+    font-size: 14px !important;
+}
 </style>
 """
 st.markdown(custom_chat_css, unsafe_allow_html=True)
@@ -105,6 +116,23 @@ prompt = st.chat_input(
     "Zadaj pytanie na temat zasad w Twojej organizacji...",
     disabled=st.session_state.pending_prompt is not None
 )
+example_questions = [
+    "Jaki jest budżet na podróż służbową?",
+    "Jakie koszty podróży służbowej nie podlegają zwrotowi?",
+    "Jakie mamy przepisy dotyczące podróży zagranicznych?"
+]
+
+if st.session_state.pending_prompt is None:
+    st.markdown("##### 💡 Przykładowe pytania")
+
+    cols = st.columns(len(example_questions))
+    for i, question in enumerate(example_questions):
+        if cols[i].button(question):
+            st.session_state.messages.append(
+                {"role": "user", "content": question})
+            st.session_state.pending_prompt = question
+            st.session_state.msg_count += 1
+            st.rerun()
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
