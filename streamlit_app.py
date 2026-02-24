@@ -21,14 +21,16 @@ if PASSWORD:
     if not st.session_state.authenticated:
         st.title("🔒 Dostęp do aplikacji")
 
-        pwd = st.text_input("Podaj hasło", type="password")
+        with st.form("login_form"):
+            pwd = st.text_input("Podaj hasło", type="password")
+            submitted = st.form_submit_button("Wejdź")
 
-        if st.button("Wejdź"):
-            if pwd == PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Niepoprawne hasło")
+            if submitted:
+                if pwd == PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Niepoprawne hasło")
 
         st.stop()
 
